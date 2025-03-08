@@ -219,6 +219,55 @@ def generate_polish_markdown(client, pdf_data, model, target_lang, bilingual):
     
     return "\n".join(md_content)
 
+@tenacity.retry(wait=tenacity.wait_exponential(multiplier=1, min=4, max=10),
+                stop=tenacity.stop_after_attempt(5),
+                reraise=True)
+def chat_summary(client, text, model, target_lang="中文"):
+    lang_map = {"中文": "中文", "英语": "英文"}
+    messages = [
+        {"role": "system", "content": "您是专业的学术论文总结专家"},
+        {"role": "user", "content": f"""
+            请用{lang_map[target_lang]}对以下学术论文内容进行结构化总结：
+            
+            输入内容：{text}
+            
+            总结要求：
+            1. 包含论文标题、作者、核心贡献
+            2. 分点总结研究方法与创新点
+            3. 提炼关键结论与学术价值
+            4. 使用Markdown格式
+            5. 重要专业术语保留英文原词
+            6. 结构清晰包含以下部分：
+               - 论文概览
+               - 核心贡献
+               - 研究方法
+               - 关键结论
+               - 学术价值
+            """}
+    ]
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        temperature=0.2,
+        max_tokens=2000
+    )
+    return response.choices[0].message.content
+
+def generate_summary_markdown(client, pdf_data, model, target_lang):
+    full_text = []
+    if pdf_data.get('title'):
+        full_text.append(f"Title: {pdf_data['title']}")
+    if pdf_data.get('authors'):
+        full_text.append(f"Authors: {', '.join(pdf_data['authors'])}")
+    if pdf_data.get('abstract'):
+        full_text.append(f"Abstract: {pdf_data['abstract']}")
+    for text in pdf_data.get('section_texts', []):
+        full_text.append(text)
+    
+    full_content = "\n\n".join(full_text)
+    return chat_summary(client, full_content, model, target_lang)
+
 @app.route('/translate', methods=['POST'])
 def translate_handler():
     try:
@@ -289,6 +338,50 @@ def polish_handler():
             model=config['model'],
             target_lang=target_lang,
             bilingual=bilingual
+        )
+        
+        return jsonify({
+            "status": "success",
+            "markdown": markdown_output,
+            "metadata": {
+                "title": pdf_data.get('title', ''),
+                "authors": pdf_data.get('authors', []),
+                "sections": len(pdf_data.get('section_names', []))
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+@app.route('/summarize', methods=['POST'])
+def summarize_handler():
+    try:
+        if not request.is_json:
+            return jsonify({"error": "请求头需设置为 application/json"}), 415
+            
+        data = request.get_json(silent=True) or {}
+        pdf_path = data.get('pdf_path')
+        target_lang = data.get('target_lang', '中文')
+        
+        if not pdf_path:
+            return jsonify({"error": "缺少pdf_path参数"}), 400
+        if not os.path.exists(pdf_path):
+            return jsonify({"error": "PDF文件不存在"}), 404
+        if target_lang not in ["英语", "中文"]:
+            return jsonify({"error": "无效的目标语言，仅支持英语/中文"}), 400
+
+        client = get_openai_client()
+        config = load_config()
+        pdf_data = parse_pdf(pdf_path)
+        
+        markdown_output = generate_summary_markdown(
+            client=client,
+            pdf_data=pdf_data,
+            model=config['model'],
+            target_lang=target_lang
         )
         
         return jsonify({

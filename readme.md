@@ -23,6 +23,7 @@ curl -X POST http://localhost:8003/translate \
     "bilingual": false
   }'
 ```
+
 润色接口：
 ```bash
 curl -X POST http://localhost:8003/polish \
@@ -31,6 +32,16 @@ curl -X POST http://localhost:8003/polish \
     "pdf_path": "test_pdf/pdf-test.pdf",
     "target_lang": "中文", //或“英语”
     "bilingual": true
+}'
+```
+
+总结接口：
+```bash
+curl -X POST http://localhost:8003/summarize \
+-H "Content-Type: application/json" \
+-d '{
+    "pdf_path": "test_pdf/pdf-test.pdf",
+    "target_lang": "中文"
 }'
 ```
 其中bilingual控制是否为双语翻译
