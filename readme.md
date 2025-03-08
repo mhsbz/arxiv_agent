@@ -14,6 +14,7 @@ curl -G http://localhost:8002/api/arxiv \
 
 ## pdf_translate_polish.py
 这是上传pdf进行翻译和润色的接口，使用说明：
+
 翻译接口：
 ```bash
 curl -X POST http://localhost:8003/translate \
