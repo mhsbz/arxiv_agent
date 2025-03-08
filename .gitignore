@@ -1,0 +1,14 @@
+./pdf_files/
+./export/
+./images/
+./logs/
+./cache/
+./temp/
+./data/
+./__pycache__/
+./venv/
+./node_modules/
+./dist/
+./build/
+./docs/
+./apikey.ini

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>论文搜索助手</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-height: 100px;
+            white-space: pre-wrap;
+            background-color: #f9f9f9;
+        }
+        .loading {
+            text-align: center;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>论文搜索助手</h1>
+    <div class="container">
+        <div>
+            <label for="inputText">请输入您的问题或关键词：</label>
+            <textarea id="inputText" placeholder="例如：请推荐几篇关于深度学习的最新论文..."></textarea>
+        </div>
+        <button id="submitBtn">搜索论文</button>
+        <div class="loading" id="loading">正在搜索相关论文，请稍候...</div>
+        <div>
+            <label for="result">搜索结果：</label>
+            <div id="result"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('submitBtn').addEventListener('click', async function() {
+            const inputText = document.getElementById('inputText').value.trim();
+            const resultDiv = document.getElementById('result');
+            const loadingDiv = document.getElementById('loading');
+            
+            if (!inputText) {
+                alert('请输入问题或关键词');
+                return;
+            }
+            
+            // 显示加载提示
+            loadingDiv.style.display = 'block';
+            resultDiv.textContent = '';
+            
+            try {
+                // 调用chat_arxiv_api
+                const response = await fetch(`http://localhost:8000/search?prompt=${encodeURIComponent(inputText)}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`API请求失败: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // 处理API返回的数据
+                if (data.papers && data.papers.length > 0) {
+                    let resultHTML = '<h3>找到以下相关论文：</h3>';
+                    resultHTML += '<ul>';
+                    
+                    data.papers.forEach(paper => {
+                        resultHTML += `<li>
+                            <strong>标题:</strong> ${paper.title}<br>
+                            <strong>作者:</strong> ${paper.authors.join(', ')}<br>
+                            <strong>发布日期:</strong> ${new Date(paper.published_date).toLocaleDateString()}<br>
+                            <strong>摘要:</strong> ${paper.abstract}<br>
+                            <strong>链接:</strong> <a href="${paper.url}" target="_blank">查看论文</a>
+                        </li><br>`;
+                    });
+                    
+                    resultHTML += '</ul>';
+                    
+                    if (data.summary) {
+                        resultHTML += `<h3>总结:</h3><p>${data.summary}</p>`;
+                    }
+                    
+                    resultDiv.innerHTML = resultHTML;
+                } else {
+                    resultDiv.textContent = data.message || '未找到相关论文';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                resultDiv.textContent = `搜索过程中发生错误: ${error.message}`;
+            } finally {
+                // 隐藏加载提示
+                loadingDiv.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
