@@ -94,6 +94,38 @@ def chat_translate(client, text, model, domain="", is_title=False, bilingual=Fal
     )
     return response.choices[0].message.content
 
+@tenacity.retry(wait=tenacity.wait_exponential(multiplier=1, min=4, max=10),
+                stop=tenacity.stop_after_attempt(5),
+                reraise=True)
+def chat_polish(client, text, model, target_lang="英语", bilingual=False):
+    lang_instruction = {
+        "英语": "将以下学术内容润色为更地道的英文",
+        "中文": "将以下学术内容润色为更地道的中文"
+    }.get(target_lang, "润色以下学术内容")
+    
+    messages = [
+        {"role": "system", "content": "您是专业的学术论文润色专家"},
+        {"role": "user", "content": f"""
+            {lang_instruction}
+            {'【对照格式】需要原文与润色后对照' if bilingual else ''}
+            输入内容：{text}
+            
+            输出要求：
+            1. 专业术语保留原文并括号标注解释（如有必要）
+            2. 使用Markdown格式
+            3. 保持原文段落结构和标题层级
+            4. 改善学术表达的专业性和流畅性
+            """}
+    ]
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        temperature=0.3,
+        max_tokens=3000
+    )
+    return response.choices[0].message.content
+
 def load_config():
     config = configparser.ConfigParser()
     config.read('apikey.ini')
@@ -148,10 +180,52 @@ def generate_markdown(client, pdf_data, model, bilingual):
     
     return "\n".join(md_content)
 
+def generate_polish_markdown(client, pdf_data, model, target_lang, bilingual):
+    md_content = []
+    
+    if 'title' in pdf_data:
+        title_polish = chat_polish(
+            client=client,
+            text=pdf_data['title'],
+            model=model,
+            target_lang=target_lang,
+            bilingual=bilingual
+        )
+        md_content.append(f"# {title_polish}\n")
+        if bilingual:
+            md_content.append(f"## 原文标题\n{pdf_data['title']}\n")
+
+    if 'abstract' in pdf_data:
+        abstract_polish = chat_polish(
+            client=client,
+            text=pdf_data['abstract'],
+            model=model,
+            target_lang=target_lang,
+            bilingual=bilingual
+        )
+        md_content.append(f"\n## 摘要\n{abstract_polish}\n")
+        if bilingual:
+            md_content.append(f"\n## 原文摘要\n{pdf_data['abstract']}\n")
+
+    for name, text in zip(pdf_data['section_names'], pdf_data['section_texts']):
+        section_polish = chat_polish(
+            client=client,
+            text=f"{name}\n{text}",
+            model=model,
+            target_lang=target_lang,
+            bilingual=bilingual
+        )
+        md_content.append(f"\n{section_polish}\n")
+    
+    return "\n".join(md_content)
+
 @app.route('/translate', methods=['POST'])
 def translate_handler():
     try:
-        data = request.json
+        if not request.is_json:
+            return jsonify({"error": "请求头需设置为 application/json"}), 415
+            
+        data = request.get_json(silent=True) or {}
         pdf_path = data.get('pdf_path')
         bilingual = data.get('bilingual', False)
         
@@ -168,6 +242,52 @@ def translate_handler():
             client=client,
             pdf_data=pdf_data,
             model=config['model'],
+            bilingual=bilingual
+        )
+        
+        return jsonify({
+            "status": "success",
+            "markdown": markdown_output,
+            "metadata": {
+                "title": pdf_data.get('title', ''),
+                "authors": pdf_data.get('authors', []),
+                "sections": len(pdf_data.get('section_names', []))
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+@app.route('/polish', methods=['POST'])
+def polish_handler():
+    try:
+        if not request.is_json:
+            return jsonify({"error": "请求头需设置为 application/json"}), 415
+            
+        data = request.get_json(silent=True) or {}
+        pdf_path = data.get('pdf_path')
+        target_lang = data.get('target_lang', '中文')
+        bilingual = data.get('bilingual', False)
+        
+        if not pdf_path:
+            return jsonify({"error": "缺少pdf_path参数"}), 400
+        if not os.path.exists(pdf_path):
+            return jsonify({"error": "PDF文件不存在"}), 404
+        if target_lang not in ["英语", "中文"]:
+            return jsonify({"error": "无效的目标语言，仅支持英语/中文"}), 400
+
+        client = get_openai_client()
+        config = load_config()
+        pdf_data = parse_pdf(pdf_path)
+        
+        markdown_output = generate_polish_markdown(
+            client=client,
+            pdf_data=pdf_data,
+            model=config['model'],
+            target_lang=target_lang,
             bilingual=bilingual
         )
         
