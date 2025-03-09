@@ -1,8 +1,0 @@
-[OpenAI]
-introduction = the api key does not ''
-OPENAI_API_KEYS = [sk-hZxxxxx ]
-# the base URL for openai or other proxy
-OPENAI_API_BASE = https://api.zeroai.link/v1
-
-CHATGPT_MODEL = gpt-4o-mini
-

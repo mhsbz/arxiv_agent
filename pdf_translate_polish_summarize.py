@@ -270,8 +270,10 @@ def generate_summary_markdown(client, pdf_data, model, target_lang):
 
 @app.route('/translate', methods=['POST'])
 def translate_handler():
+    print("Received request to translate PDF")
     try:
         if not request.is_json:
+            print("Request is not JSON")
             return jsonify({"error": "请求头需设置为 application/json"}), 415
             
         data = request.get_json(silent=True) or {}
@@ -279,8 +281,10 @@ def translate_handler():
         bilingual = data.get('bilingual', False)
         
         if not pdf_path:
+            print("PDF path is missing")
             return jsonify({"error": "缺少pdf_path参数"}), 400
         if not os.path.exists(pdf_path):
+            print("PDF file does not exist")
             return jsonify({"error": "PDF文件不存在"}), 404
 
         client = get_openai_client()
@@ -305,6 +309,8 @@ def translate_handler():
         }), 200
 
     except Exception as e:
+        print(f"Error: {str(e)}")
+
         return jsonify({
             "status": "error",
             "message": str(e)

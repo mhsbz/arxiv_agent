@@ -177,6 +177,7 @@ def arxiv_api():
         papers = search_arxiv(
             query=query, max_results=max_results, days=days, page_num=page_num)
         if not papers:
+            print("未找到符合条件的论文")
             return jsonify({"message": "未找到符合条件的论文"}), 404
 
         result_list = []
@@ -200,6 +201,7 @@ def arxiv_api():
         return jsonify({"papers": result_list})
 
     except Exception as e:
+        print(f"搜索论文时发生错误: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 
